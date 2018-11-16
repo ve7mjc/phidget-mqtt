@@ -14,6 +14,9 @@
 // Payload: "on" or "off"
 //
 
+// TODO
+// Solve for late-joining and MQTT problems
+
 const assert = require('assert');
 const mqtt = require('mqtt')
 const mqtt_regex = require("mqtt-regex");
@@ -46,6 +49,17 @@ mqttc.on('reconnect', function () {
 	console.log("[mqttc] reconnecting")
 })
 
+var device = [{
+	serial : 515667,
+	model : 1012,
+	digitalOutput : [],
+	digitalInput : []
+}]
+
+for (var i = 0; i < 16; i++ ) {
+	device[0].digitalOutput[i] = new jPhidget22.DigitalOutput()
+}
+
 var setPhidgetDigitalOutput = function(board, channel, state) {
   
     channel = parseInt(channel, 10)
@@ -61,37 +75,20 @@ var setPhidgetDigitalOutput = function(board, channel, state) {
     if (state == "0") state = false
     if (state == "off") state = false
     if (state == "false") state = false
-
-    // HARDCODED Serial Number mapping!
-    var deviceSerialNumber
-    if (board == 0) deviceSerialNumber = 515667
     
-    var ch = new jPhidget22.DigitalOutput()
-    
-    ch.onAttach = function(ch) { 
-        
-        ch.setState(state).then( function() {
+	device[board].digitalOutput[channel].setState(state)
+		.then((value) => {
+			console.info("setState("+board+"," + channel +") promise returned")
             // success setting state of output
             var topic = MQTT_TOPIC_PREFIX + "/" + board.toString() + "/do/" + channel.toString() + "/state"
             var message = "off"
             if (state) message = "on"
             mqttc.publish(topic, message, { retain : true, qos : 1 })
-        }).catch( function (err) {
-            console.error("error setState()", err)
-        })
-
-        ch.close()
-    }
-    
-    // Channel and DeviceSerialNumber must be 
-    // set prior to opening channel
-    ch.setChannel(channel)
-    ch.setDeviceSerialNumber(deviceSerialNumber)
-    ch.open().then(function (ch) {
-
-    }).catch(function (err) {
-        console.error('failed to open the channel:' + err);
-    })
+		}, function() {
+			console.error('cannot set state' + errorCode())
+		})
+		
+	console.info("setState("+ channel + ") called")
     
 }
 
@@ -111,11 +108,50 @@ mqttc.on('message', function (topic, message) {
 
 var url = 'phid://' + PHIDGET_SERVER_HOST + ':' + PHIDGET_SERVER_PORT;
 
-console.info('connecting to ' + url);
-var conn = new jPhidget22.Connection(url, { name: 'Server Connection', passwd: '' });
-conn.connect()
-    .then()
-    .catch(function (err) {
-        console.error(err);
-        process.exit(1);
-    });
+console.info('[phidget] connecting to ' + url);
+var phidgetConn = new jPhidget22.Connection(url, { name: 'Server Connection', passwd: '' });
+
+phidgetConn.onDisconnect = function() {
+	console.error("[phidget] disconnected")
+}
+
+phidgetConn.onConnect = function() {
+	
+	console.info("[phidget] connected")
+	
+	for (var i = 0; i < 16; i++ ) {
+		
+	    device[0].digitalOutput[i].onAttach = function(ch) { 
+			console.info("[phidget] attached channel "+ ch.getChannel())
+	    }
+	    
+	    device[0].digitalOutput[i].onDetach = function(ch) { 
+			console.info("[phidget] detached channel " + ch.getChannel())
+	    }
+	    
+	    device[0].digitalOutput[i].onError = function(ch) {
+			console.info("[phidget] channel error for ch " + ch.getChannel())
+	    }
+	    
+	    device[0].digitalOutput[i].setChannel(i)
+	    device[0].digitalOutput[i].setDeviceSerialNumber(device[0].serial)
+	    device[0].digitalOutput[i].open(2000, { isRemote : true })
+	    	.then(function (ch) {
+
+		    }).catch(function (err) {
+		        console.error('failed to open the channel:' + err)
+		    })
+		    
+		// digitalInputs[i] = new jPhidget22.DigitalInput()
+	}
+	
+}
+
+phidgetConn.onError = function(code, msg) {
+	var eMsg = "[phidget] error connecting: " + code + "; " + msg
+	console.error(eMsg)
+	process.exit(1)
+}
+
+phidgetConn.connect()
+

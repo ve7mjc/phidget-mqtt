@@ -22,23 +22,20 @@ const mqtt = require('mqtt')
 const mqtt_regex = require("mqtt-regex");
 const jPhidget22 = require('phidget22');
 
-const MQTT_HOST = "127.0.0.1"
-const MQTT_TOPIC_PREFIX = "phidget"
-const PHIDGET_SERVER_PORT = 5661;
-const PHIDGET_SERVER_HOST = "127.0.0.1"
+const config = require('./config')
 
-// handle SIGINT for graceful restarts with 
+// handle SIGINT for graceful restarts with
 // process management daemons such as pm2
 process.on('SIGINT', function() {
     console.log("received SIGINT; exiting")
     process.exit()
 });
 
-const mqttc = mqtt.connect('mqtt://' + MQTT_HOST)
+const mqttc = mqtt.connect('mqtt://' + config.mqtt.host + ":" + config.mqtt.port)
 
 mqttc.on('connect', function () {
 	console.log("[mqtt] connected to MQTT broker")
-	mqttc.subscribe(MQTT_TOPIC_PREFIX + "/#")
+	mqttc.subscribe(config.mqtt.topic_prefix + "/#")
 })
 
 mqttc.on('error', function (error) {
@@ -49,19 +46,41 @@ mqttc.on('reconnect', function () {
 	console.log("[mqttc] reconnecting")
 })
 
-var device = [{
-	serial : 515667,
-	model : 1012,
-	digitalOutput : [],
-	digitalInput : []
-}]
+// CONFIGURE DEVICSE
 
-for (var i = 0; i < 16; i++ ) {
-	device[0].digitalOutput[i] = new jPhidget22.DigitalOutput()
+// iterate boards from config
+var device = []
+console.info("configuring " + config.phidgets.length + " phidgets")
+for (var i = 0; i < config.phidgets.length; i++ ) {
+
+    device[i] = {}
+    device[i].index = i // todo; work with config designation
+    device[i].model = config.phidgets[i].model
+    device[i].serial = config.phidgets[i].serial
+
+    if (device[i].model == "1012") {
+        device[i].num_digital_outputs = 16
+        device[i].num_digital_inputs = 16
+    }
+
+    // initialize DigitalOutput channels
+    if (device[i].num_digital_outputs) device[i].digitalOutput = []
+	for (var j=0; j<device[i].num_digital_outputs ; j++) {
+	    device[i].digitalOutput[j] = new jPhidget22.DigitalOutput()
+	}
+
+	// Initialize DigitalInput channels
+    if (device[i].num_digital_inputs) device[i].digitalInput = []
+	for (var j=0; j<device[i].num_digital_inputs; j++) {
+	    device[i].digitalInput[j] = new jPhidget22.DigitalInput()
+	}
+
+	console.info("configured phidget " + device[i].model + " SN# " + device[i].serial)
+
 }
 
 var setPhidgetDigitalOutput = function(board, channel, state) {
-  
+
     channel = parseInt(channel, 10)
     board = parseInt(board, 10)
 
@@ -75,27 +94,27 @@ var setPhidgetDigitalOutput = function(board, channel, state) {
     if (state == "0") state = false
     if (state == "off") state = false
     if (state == "false") state = false
-    
+
 	device[board].digitalOutput[channel].setState(state)
 		.then((value) => {
 			console.info("setState("+board+"," + channel +") promise returned")
             // success setting state of output
-            var topic = MQTT_TOPIC_PREFIX + "/" + board.toString() + "/do/" + channel.toString() + "/state"
+            var topic = config.mqtt.topic_prefix + "/" + board.toString() + "/do/" + channel.toString() + "/state"
             var message = "off"
             if (state) message = "on"
             mqttc.publish(topic, message, { retain : true, qos : 1 })
 		}, function() {
 			console.error('cannot set state' + errorCode())
 		})
-		
+
 	console.info("setState("+ channel + ") called")
-    
+
 }
 
 mqttc.on('message', function (topic, message) {
 
     // RECEIVED SET REQUEST
-    var pattern = MQTT_TOPIC_PREFIX + "/+board/do/+ch/set"
+    var pattern = config.mqtt.topic_prefix + "/+board/do/+ch/set"
     var request = mqtt_regex(pattern).exec
     var params = request(topic)
     if (params) {
@@ -106,7 +125,7 @@ mqttc.on('message', function (topic, message) {
 
 })
 
-var url = 'phid://' + PHIDGET_SERVER_HOST + ':' + PHIDGET_SERVER_PORT;
+var url = 'phid://' + config.phidget_server.host + ':' + config.phidget_server.port;
 
 console.info('[phidget] connecting to ' + url);
 var phidgetConn = new jPhidget22.Connection(url, { name: 'Server Connection', passwd: '' });
@@ -116,35 +135,77 @@ phidgetConn.onDisconnect = function() {
 }
 
 phidgetConn.onConnect = function() {
-	
-	console.info("[phidget] connected")
-	
-	for (var i = 0; i < 16; i++ ) {
-		
-	    device[0].digitalOutput[i].onAttach = function(ch) { 
-			console.info("[phidget] attached channel "+ ch.getChannel())
-	    }
-	    
-	    device[0].digitalOutput[i].onDetach = function(ch) { 
-			console.info("[phidget] detached channel " + ch.getChannel())
-	    }
-	    
-	    device[0].digitalOutput[i].onError = function(ch) {
-			console.info("[phidget] channel error for ch " + ch.getChannel())
-	    }
-	    
-	    device[0].digitalOutput[i].setChannel(i)
-	    device[0].digitalOutput[i].setDeviceSerialNumber(device[0].serial)
-	    device[0].digitalOutput[i].open(2000, { isRemote : true })
-	    	.then(function (ch) {
 
-		    }).catch(function (err) {
-		        console.error('failed to open the channel:' + err)
-		    })
-		    
-		// digitalInputs[i] = new jPhidget22.DigitalInput()
+	console.info("[phidget] connected")
+
+	for (dev of device) {
+
+	    // Open All DigitalOutput
+	    if (dev.num_digital_outputs) {
+	        for (var i=0; i<dev.num_digital_outputs; i++) {
+        	    dev.digitalOutput[i].onAttach = function(ch) {
+        			console.info("[phidget] attached DigitalOutput channel # "+ ch.getChannel())
+        	    }
+
+        	    dev.digitalOutput[i].onDetach = function(ch) {
+        			console.info("[phidget] detached DigitalOutput channel # " + ch.getChannel())
+        	    }
+
+        	    dev.digitalOutput[i].onError = function(ch) {
+        			console.info("[phidget] channel error for ch " + ch.getChannel())
+        	    }
+
+        	    dev.digitalOutput[i].setChannel(i)
+        	    dev.digitalOutput[i].setDeviceSerialNumber(dev.serial)
+        	    dev.digitalOutput[i].open(2000, { isRemote : true })
+        	    	.then(function (ch) {
+
+        		    }).catch(function (err) {
+        		        console.error('failed to open the channel:' + err)
+        		    })
+	        }
+	    }
+
+	    // Open All DigitalInput
+	    if (dev.num_digital_inputs) {
+	        for (var i=0; i<dev.num_digital_inputs; i++) {
+        	    dev.digitalInput[i].onAttach = function(ch) {
+        			console.info("[phidget] attached DigitalInput channel # "+ ch.getChannel())
+                    var topic = config.mqtt.topic_prefix + "/" + dev.index + "/di/" + ch.getChannel() + "/state"
+                    var message = "0"
+                    if (ch.getState()) message = "1"
+                    mqttc.publish(topic, message, { retain : true, qos : 1 })
+        	    }
+
+        	    dev.digitalInput[i].onStateChange = function(ch) {
+        			console.info("[phidget] attached DigitalInput channel # "+ ch.getChannel())
+                    var topic = config.mqtt.topic_prefix + "/" + dev.index + "/di/" + ch.getChannel() + "/state"
+                    var message = "0"
+                    if (ch.getState()) message = "1"
+                    mqttc.publish(topic, message, { retain : true, qos : 1 })
+        	    }
+
+        	    dev.digitalInput[i].onDetach = function(ch) {
+        			console.info("[phidget] detached DigitalInput channel # " + ch.getChannel())
+        	    }
+
+        	    dev.digitalInput[i].onError = function(ch) {
+        			console.info("[phidget] channel error for ch " + ch.getChannel())
+        	    }
+
+        	    dev.digitalInput[i].setChannel(i)
+        	    dev.digitalInput[i].setDeviceSerialNumber(dev.serial)
+        	    dev.digitalInput[i].open(2000, { isRemote : true })
+        	    	.then(function (ch) {
+
+        		    }).catch(function (err) {
+        		        console.error('failed to open the channel:' + err)
+        		    })
+	        }
+	    }
+
 	}
-	
+
 }
 
 phidgetConn.onError = function(code, msg) {

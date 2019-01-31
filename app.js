@@ -168,29 +168,36 @@ phidgetConn.onConnect = function() {
 
 	    // Open All DigitalInput
 	    if (dev.num_digital_inputs) {
-	        for (var i=0; i<dev.num_digital_inputs; i++) {
+	        for (var i=0; i<dev.num_digital_inputs; i++)
+	        {
+	        	
+				// Attach - DigitalInput channel is attached and ready to use
+				// read state and publish to MQTT topic
         	    dev.digitalInput[i].onAttach = function(ch) {
         			console.info("[phidget] attached DigitalInput channel # "+ ch.getChannel())
                     var topic = config.mqtt.topic_prefix + "/" + dev.index + "/di/" + ch.getChannel() + "/state"
                     var message = "0"
-                    if (ch.getState()) message = "1"
+                    if (dev.digitalInput[ch.getChannel()].getState()) message = "1"
                     mqttc.publish(topic, message, { retain : true, qos : 1 })
         	    }
 
-        	    dev.digitalInput[i].onStateChange = function(ch) {
-        			console.info("[phidget] attached DigitalInput channel # "+ ch.getChannel())
-                    var topic = config.mqtt.topic_prefix + "/" + dev.index + "/di/" + ch.getChannel() + "/state"
+				// the onStateChange event does not pass the DigitalInput channel
+				// and thus we must pass in the index number
+				let ch_num = i
+        	    dev.digitalInput[i].onStateChange = function(state) {
+        			console.info("[phidget] DigitalInput # "+ ch_num + " is now " + state)
+                    var topic = config.mqtt.topic_prefix + "/" + dev.index + "/di/" + ch_num + "/state"
                     var message = "0"
-                    if (ch.getState()) message = "1"
+                    if (state) message = "1"
                     mqttc.publish(topic, message, { retain : true, qos : 1 })
         	    }
 
         	    dev.digitalInput[i].onDetach = function(ch) {
-        			console.info("[phidget] detached DigitalInput channel # " + ch.getChannel())
+        			console.info("[phidget] detached DigitalInput channel # " + ch)
         	    }
 
         	    dev.digitalInput[i].onError = function(ch) {
-        			console.info("[phidget] channel error for ch " + ch.getChannel())
+        			console.info("[phidget] channel error for ch " + ch)
         	    }
 
         	    dev.digitalInput[i].setChannel(i)

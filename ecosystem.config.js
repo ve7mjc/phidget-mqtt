@@ -1,7 +1,7 @@
 module.exports = {
     apps : [{
         name       : 'phidget-mqtt',
-        script     : 'app.js',
+        script     : '/opt/phidget-mqtt/app.js',
         watch      : '*.js',
         error_file : 'err.log',
         out_file   : 'out.log',

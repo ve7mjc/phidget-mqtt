@@ -11,6 +11,6 @@
   "dependencies": {
     "mqtt": "^2.18.8",
     "mqtt-regex": "^1.0.5",
-    "phidget22": "^2.0.7"
+    "phidget22": "^2.0.11"
   }
 }

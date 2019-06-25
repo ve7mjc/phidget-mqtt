@@ -15,6 +15,7 @@
 //
 
 // https://www.phidgets.com/?view=api
+// https://www.npmjs.com/package/mqtt#client
 //
 
 // TODO
@@ -92,18 +93,47 @@ for (var i = 0; i < config.phidgets.length; i++ ) {
 var setPhidgetDigitalOutput = function(board, channel, state) {
 
     channel = parseInt(channel, 10)
+
+	// temporary limit to channel 15
+	if ((channel >= 16) || (!Number.isInteger(channel))) {
+		console.error("requested channel " + channel + " but 15 is max!")
+		return
+	}
+
     board = parseInt(board, 10)
+    state = state.toLowerCase()
 
     // 50 shades of truthiness
-    // TRUE
-    if (state == "1") state = true
-    if (state == "on") state = true
-    if (state == "true") state = true
-
-    // FALSE
-    if (state == "0") state = false
-    if (state == "off") state = false
-    if (state == "false") state = false
+    
+    switch (state) {
+    	
+    	case "1":
+    		state = true
+    	break
+    	
+    	case "on":
+    		state = true
+    	break
+    	
+    	case "true":
+    		state = true
+    	break
+    	
+    	case "0":
+    		state = false
+    	break
+    	
+    	case "off":
+    		state = false
+    	
+    	case "false":
+    		state = false
+    		
+   		default:
+   			state = true
+    	
+    }
+    
 
 	device[board].digitalOutput[channel].setState(state)
 		.then((value) => {
@@ -117,7 +147,7 @@ var setPhidgetDigitalOutput = function(board, channel, state) {
 			console.error('cannot set state')
 		})
 
-	console.info("setState("+ channel + ") called")
+	console.info("setState("+ channel + ")=" + state + " called")
 
 }
 

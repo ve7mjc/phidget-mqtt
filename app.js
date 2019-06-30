@@ -125,9 +125,11 @@ var setPhidgetDigitalOutput = function(board, channel, state) {
     	
     	case "off":
     		state = false
+    	break
     	
     	case "false":
     		state = false
+    	break
     		
    		default:
    			state = true
@@ -140,8 +142,8 @@ var setPhidgetDigitalOutput = function(board, channel, state) {
 			console.info("setState("+board+"," + channel +") promise returned")
             // success setting state of output
             var topic = config.mqtt.topic_prefix + "/" + board.toString() + "/do/" + channel.toString() + "/state"
-            var message = "off"
-            if (state) message = "on"
+            var message = "OFF"
+            if (state) message = "ON"
             mqttc.publish(topic, message, { retain : true, qos : 1 })
 		}, function() {
 			console.error('cannot set state')

@@ -11,6 +11,7 @@
   "dependencies": {
     "mqtt": "^2.18.8",
     "mqtt-regex": "^1.0.5",
-    "phidget22": "^2.0.11"
+    "phidget22": "^2.6.3",
+    "sd-notify": "^2.8.0"
   }
 }

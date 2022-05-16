@@ -1,0 +1,18 @@
+[Unit]
+Description=Phidget MQTT Bridge
+Requires=phidget22networkserver.service emqx.service
+
+[Service]
+Type=notify
+Environment="NODE_ENV=production"
+ExecStart=/usr/bin/node /opt/phidget-mqtt/app.js
+TimeoutStartSec=30
+NotifyAccess=all
+Restart=always
+WatchdogSec=4
+
+User=mcurrie
+Group=mcurrie
+
+[Install]
+WantedBy=multi-user.target

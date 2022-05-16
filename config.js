@@ -13,6 +13,11 @@ const config = {
             index : 0,
             serial : 515667,
             model : 1012
+        },
+        {
+            index : 1,
+            serial : 537133,
+            model : 1012
         }
     ]
 }
